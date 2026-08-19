@@ -1,48 +1,125 @@
-name: Docker CI
+name: Deploy Frontend
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  docker:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+
+      # 1. Checkout repository on GitHub Actions runner
+      - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          tags: frontend-demo:test
-          load: true
-
-      - name: Run container
+      # 2. Configure SSH
+      - name: Configure SSH
         run: |
-          docker run -d \
-            --name frontend-demo \
-            -p 8080:80 \
-            frontend-demo:test
+          mkdir -p ~/.ssh
 
-      - name: Check container
-        run: docker ps
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
 
-      - name: Test frontend
-        run: curl --fail http://localhost:8080
+          chmod 600 ~/.ssh/ec2_key
 
-      - name: Show container logs
-        if: always()
-        run: docker logs frontend-demo
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Stop container
-        if: always()
-        run: docker stop frontend-demo || true
+      # 3. Connect to EC2 and deploy
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+
+            set -e
+
+            echo "================================="
+            echo "Installing Docker if necessary"
+            echo "================================="
+
+            if ! command -v docker >/dev/null 2>&1; then
+
+              sudo yum update -y
+
+              sudo yum install -y docker
+
+              sudo systemctl enable docker
+
+              sudo systemctl start docker
+
+              sudo usermod -aG docker ec2-user
+
+            else
+
+              echo "Docker already installed"
+
+            fi
+
+
+            echo "================================="
+            echo "Starting Docker"
+            echo "================================="
+
+            sudo systemctl start docker
+
+
+            echo "================================="
+            echo "Preparing application directory"
+            echo "================================="
+
+            rm -rf /home/ec2-user/frontend-project
+
+            mkdir -p /home/ec2-user/frontend-project
+
+            cd /home/ec2-user/frontend-project
+
+
+            echo "================================="
+            echo "Cloning repository"
+            echo "================================="
+
+            git clone https://github.com/Dheeraj2834/Docker-practice.git .
+
+
+            echo "================================="
+            echo "Building Docker image"
+            echo "================================="
+
+            sudo docker build \
+              -t frontend-app:latest \
+              .
+
+
+            echo "================================="
+            echo "Stopping old container"
+            echo "================================="
+
+            sudo docker stop frontend-app || true
+
+            sudo docker rm frontend-app || true
+
+
+            echo "================================="
+            echo "Starting new container"
+            echo "================================="
+
+            sudo docker run -d \
+              --name frontend-app \
+              --restart unless-stopped \
+              -p 80:80 \
+              frontend-app:latest
+
+
+            echo "================================="
+            echo "Container status"
+            echo "================================="
+
+            sudo docker ps
+
+
+            echo "================================="
+            echo "Deployment complete"
+            echo "================================="
+
+          EOF
