@@ -11,11 +11,9 @@ jobs:
 
     steps:
 
-      # 1. Checkout repository on GitHub Actions runner
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # 2. Configure SSH
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -26,7 +24,6 @@ jobs:
 
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      # 3. Connect to EC2 and deploy
       - name: Deploy to EC2
         run: |
           ssh -i ~/.ssh/ec2_key \
@@ -35,32 +32,31 @@ jobs:
             set -e
 
             echo "================================="
-            echo "Installing Docker if necessary"
+            echo "Installing required packages"
             echo "================================="
 
+            # Install Docker and Git
             if ! command -v docker >/dev/null 2>&1; then
-
               sudo yum update -y
-
               sudo yum install -y docker
-
-              sudo systemctl enable docker
-
-              sudo systemctl start docker
-
-              sudo usermod -aG docker ec2-user
-
-            else
-
-              echo "Docker already installedd"
-
             fi
+
+            if ! command -v git >/dev/null 2>&1; then
+              sudo yum install -y git
+            fi
+
+            echo "Docker version:"
+            sudo docker --version
+
+            echo "Git version:"
+            git --version
 
 
             echo "================================="
             echo "Starting Docker"
             echo "================================="
 
+            sudo systemctl enable docker
             sudo systemctl start docker
 
 
@@ -80,6 +76,13 @@ jobs:
             echo "================================="
 
             git clone https://github.com/Dheeraj2834/Docker-practice.git .
+
+
+            echo "================================="
+            echo "Repository contents"
+            echo "================================="
+
+            ls -la
 
 
             echo "================================="
@@ -116,6 +119,13 @@ jobs:
             echo "================================="
 
             sudo docker ps
+
+
+            echo "================================="
+            echo "Container logs"
+            echo "================================="
+
+            sudo docker logs frontend-app
 
 
             echo "================================="
