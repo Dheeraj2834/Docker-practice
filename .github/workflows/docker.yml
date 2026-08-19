@@ -52,7 +52,7 @@ jobs:
 
             else
 
-              echo "Docker already installed"
+              echo "Docker already installedd"
 
             fi
 
